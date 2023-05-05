@@ -11,13 +11,14 @@ def build_dp(model, device='cuda', default_args=None):
     """build DataParallel module by device type.
 
     if device is cuda, return a MMDataParallel model; if device is mlu,
-    return a MLUDataParallel model.
+    return a MLUDataParallel model; if device is npu, 
+    return a NPUDataParallel model
     Args:
         model(nn.Module): model to be parallelized.
-        device(str): device type, cuda, cpu or mlu. Defaults to cuda.
+        device(str): device type, cuda, cpu or mlu or npu. Defaults to cuda.
         default_args: dict type, include the following parameters.
             device_ids(int): device ids of modules to be scattered to.
-                Defaults to None when GPU or MLU is not available.
+                Defaults to None when GPU or MLU or NPU is not available.
     Returns:
         model(nn.Module): the model to be parallelized.
     """
@@ -28,6 +29,12 @@ def build_dp(model, device='cuda', default_args=None):
         from mmcv.device.mlu import MLUDataParallel
         dp_factory['mlu'] = MLUDataParallel
         model = model.mlu()
+    elif device == 'npu':
+        from mmcv.device.npu import NPUDataParallel
+        dp_factory['npu'] = NPUDataParallel
+        torch.npu.set_device(default_args['device_ids'][0])
+        torch.npu.set_compile_mode(jit_compile=False)
+        model = model.npu()
 
     return dp_factory[device](model, **default_args)
 
@@ -36,9 +43,10 @@ def build_ddp(model, device='cuda', default_args=None):
     """Build DistributedDataParallel module by device type.
     If device is cuda, return a MMDistributedDataParallel model;
     if device is mlu, return a MLUDistributedDataParallel model.
+    if device is npu, return a NPUDistributedDataParallel model.
     Args:
         model(:class:`nn.Moudle`): module to be parallelized.
-        device(str): device type, mlu or cuda.
+        device(str): device type, mlu or cuda or npu.
         default_args: dict type, include the following parameters.
             device_ids(int): which represents the only device where the input
                 module corresponding to this process resides. Defaults to None.
@@ -64,14 +72,19 @@ def build_ddp(model, device='cuda', default_args=None):
                      DistributedDataParallel.html
     """
 
-    assert device in ['cuda', 'mlu'
-                      ], 'Only available for cuda or mlu devices currently.'
+    assert device in ['cuda', 'mlu', 'npu'
+                      ], 'Only available for cuda or mlu or npu devices currently.'
     if device == 'cuda':
         model = model.cuda()
     elif device == 'mlu':
         from mmcv.device.mlu import MLUDistributedDataParallel
         ddp_factory['mlu'] = MLUDistributedDataParallel
         model = model.mlu()
+    elif device == 'npu':
+        from mmcv.device.npu import NPUDistributedDataParallel
+        torch.npu.set_compile_mode(jit_compile=False)
+        ddp_factory['npu'] = NPUDistributedDataParallel
+        model = model.npu()
 
     return ddp_factory[device](model, **default_args)
 
@@ -80,15 +93,20 @@ def is_mlu_available():
     """Returns a bool indicating if MLU is currently available."""
     return hasattr(torch, 'is_mlu_available') and torch.is_mlu_available()
 
+def is_npu_available():
+    """Returns a bool indicating if NPU is currently available."""
+    return hasattr(torch, 'npu') and torch.npu.is_available()
 
 def get_device():
-    """Returns an available device, cpu, cuda or mlu."""
+    """Returns an available device, cpu, cuda or mlu or npu."""
     is_device_available = {
         'cuda': torch.cuda.is_available(),
-        'mlu': is_mlu_available()
+        'mlu': is_mlu_available(),
+        'npu': is_npu_available(),
     }
     device_list = [k for k, v in is_device_available.items() if v]
     return device_list[0] if len(device_list) == 1 else 'cpu'
+
 
 
 default_device = get_device()

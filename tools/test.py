@@ -167,6 +167,13 @@ def inference_pytorch(args, cfg, distributed, data_loader):
             default_args=dict(
                 device_ids=[int(os.environ['LOCAL_RANK'])],
                 broadcast_buffers=False))
+        # In multi_gpu_test, if tmpdir is None, some tesnors
+        # will init on cuda by default, and no device choice supported.
+        # Init a tmpdir to avoid error on npu here
+
+        if default_device == 'npu' and args.tmpdir is None:
+            args.tmpdir = './npu_tmpdir'
+
         outputs = multi_gpu_test(model, data_loader, args.tmpdir,
                                  args.gpu_collect)
 
